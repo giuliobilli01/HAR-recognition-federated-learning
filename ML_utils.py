@@ -43,10 +43,14 @@ def feature_selection_anova(X_train, X_test, a_val, varianza_media_classi):
     return X_train[:, less_than_anova_vals], X_test[:, less_than_anova_vals]
 
 
-def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, max_som_dm, step, mean_path, subjects_loaded, centralized, single, federated):
+def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, max_som_dm, step, mean_path, subjects_loaded, centralized, single, federated, execution_num):
     mean_dict = {}
     subjects_num = len(subjects_loaded)
-    
+    print("nofed accs", nofed_accs)
+    print("fed accs", fed_accs)
+    print("centr accs", centr_accs)
+
+
     if os.path.exists("./" + mean_path + "/" + "mean.txt"): 
         with open ("./" + mean_path + "/"  + "mean.txt") as js:
             data = json.load(js)
@@ -57,21 +61,28 @@ def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, 
         subs_string += ("-" + str(sub))
     subs_string+="]"
     
-    mean_dict.update({subs_string: { "subjects": subjects_loaded, "nofed_accs": {}, "fed_accs": {}, "centr_accs": {}}})
+    mean_dict.setdefault(subs_string, { "subjects": subjects_loaded, "nofed_accs": {}, "fed_accs": {}, "centr_accs": {}})
+
+    print("mean dict after set", mean_dict)
     
-    for dim in range(min_som_dim, max_som_dm + step, step):
-        accumulatore = 0
-        if single:
-            for subj_num in nofed_accs.keys():
-                accumulatore += nofed_accs[subj_num][dim]
+    for execution in range(execution_num):
+        for dim in range(min_som_dim, max_som_dm + step, step):
+            accumulatore = 0
+            if single:
+                for subj_num in nofed_accs.keys():
+                    accumulatore += nofed_accs[subj_num][dim][execution]
+                
+                mean_dict[subs_string]["nofed_accs"].setdefault(str(dim), [])
 
-            mean_dict[subs_string]["nofed_accs"].update({dim: accumulatore/subjects_num})
-        
-        if federated:
-            mean_dict[subs_string]["fed_accs"].update({dim: fed_accs[dim]["accuracy"]})
+                mean_dict[subs_string]["nofed_accs"][str(dim)].append(accumulatore/subjects_num)
 
-    if centralized:
-        mean_dict[subs_string]["centr_accs"].update(centr_accs)
+            if federated:
+                mean_dict[subs_string]["fed_accs"].setdefault(str(dim), [])
+                mean_dict[subs_string]["fed_accs"][str(dim)].append(fed_accs[dim][execution]["accuracy"])
+
+            if centralized:
+                mean_dict[subs_string]["centr_accs"].setdefault(str(dim), [])
+                mean_dict[subs_string]["centr_accs"][str(dim)].append(centr_accs[dim][execution])
     #salvo il dizionario
     with open("./" + mean_path + "/" + "mean.txt", "w") as fp:
         json.dump(mean_dict, fp, indent=4)

@@ -324,7 +324,7 @@ def plot_class_distribution(subjects, subjects_dictionary, idx_group):
     ax.set_title(f'Class ditributions subs({(idx_group - 1)*3}-{idx_group * 3})')
     ax.set_xticks(x + width, subjects)
     ax.legend(loc='upper left', ncols=6)
-    ax.set_ylim(0, 250)
+    ax.set_ylim(0, 150)
 
     plt.savefig(f"./class-distribution_subs({(idx_group - 1)*3}-{idx_group * 3}).png")
         

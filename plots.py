@@ -436,17 +436,17 @@ def plot_fed_nofed_centr_comp(mean_path, min_som_dim, max_som_dim, step, central
         for key in data_dict.keys():
             subjects_nums.append(len(data_dict[key]["subjects"]))
             if single:
-                nofed_accs.append(data_dict[key]["nofed_accs"][str(dim)])
+                nofed_accs.append(data_dict[key]["nofed_accs"][str(dim)][0])
             if federated:
-                fed_accs.append(data_dict[key]["fed_accs"][str(dim)][-1][-1])
+                fed_accs.append(data_dict[key]["fed_accs"][str(dim)][0][-1][-1])
             if centralized:
-                centr_accs.append(data_dict[key]["centr_accs"][str(dim)])
+                centr_accs.append(data_dict[key]["centr_accs"][str(dim)][0])
         
         plt.plot(subjects_nums, nofed_accs, label="no-federated", marker='o')
         plt.plot(subjects_nums, fed_accs, label="federated", marker='o')
         plt.plot(subjects_nums, centr_accs, label="centralized", marker='o')
 
-        plt.xlabel("Subjects")
+        plt.xlabel(f"Subjects")
         plt.ylabel("Accuracy")
         plt.title("Confronto tra federated, non federated e centralizzato")
 
@@ -460,3 +460,51 @@ def plot_fed_nofed_centr_comp(mean_path, min_som_dim, max_som_dim, step, central
         )
         plt.close()
     
+def plot_cluster_comparison(mean_path, min_som_dim, max_som_dim, step, centralized, single, federated, execution_num):
+    data_dict = {}
+    if os.path.exists("./" + mean_path + "/" + "mean.txt"): 
+        with open ("./" + mean_path + "/" + "mean.txt") as js:
+            data = json.load(js)
+            data_dict = data
+    
+    for key in data_dict.keys():
+        subs_string = "subjects["
+        for sub in data_dict[key]["subjects"]:
+            subs_string += ("-" + str(sub))
+        subs_string+="]"
+
+        for dim in range(min_som_dim, max_som_dim + step, step):
+            nofed_accs = []
+            fed_accs = []
+            centr_accs = []
+            executions = np.arange(1, len(data_dict[key]["nofed_accs"][str(dim)]) + 1)
+            print("execs", executions)
+            plt.figure()
+            for execution in range(len(executions)):
+                if single:
+                    nofed_accs.append(data_dict[key]["nofed_accs"][str(dim)][execution])
+                if federated:
+                    fed_accs.append(data_dict[key]["fed_accs"][str(dim)][execution][-1][-1])
+                if centralized:
+                    centr_accs.append(data_dict[key]["centr_accs"][str(dim)][execution])
+            
+
+            plt.plot(executions, nofed_accs, label="no-federated", marker='o')
+            plt.plot(executions, fed_accs, label="federated", marker='o')
+            plt.plot(executions, centr_accs, label="centralized", marker='o')
+
+            plt.xlabel(f"Executions")
+            plt.ylabel("Accuracy")
+            plt.title(f"Accuracies soggetti {subs_string}")
+
+            plt.legend()
+            plt.savefig(
+                "./"
+                + subs_string + "_"
+                + "som-" + str(dim) + "_comp-fed-nofed"
+                + ".png"
+            )
+            plt.close()
+            
+
+

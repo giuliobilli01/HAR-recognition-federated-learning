@@ -18,7 +18,7 @@ from flwr.common import NDArrays, Scalar, Metrics
 from utils import init_directories, load_subjects_dataset, create_subjects_datasets, calculate_class_distribution
 from anovaf import get_anovaf
 from plots import plot_fed_nofed_centr_comp, plot_som_comp_dim
-from plots import plot_som
+from plots import plot_som, plot_cluster_comparison
 from ML_utils import calculate_subjects_accs_mean
 
 # input parameter: 
@@ -266,7 +266,7 @@ def train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_
         print("testX sub", testX_lst[subj_idx].shape)
         print("testy sub", testy_lst[subj_idx].shape)
         accs_subjects_nofed.setdefault(subj,{})
-        accs_subjects_nofed[subj].setdefault(current_som_dim, 0)
+        accs_subjects_nofed[subj].setdefault(current_som_dim, [])
         actual_exec = 0
         run_training_nofed(trainX_lst[subj_idx], trainy_lst[subj_idx], testX_lst[subj_idx], testy_lst[subj_idx], run_type ,subj)
 
@@ -526,10 +526,11 @@ def execute_minisom_anova(
     # insert in accuracy dictionary the accuracy for anova val
     accs_tot_avg.append(class_report["accuracy"])
     
-    if run_type == "centr":
-        accs_subjects_centr.update({n_neurons: class_report["accuracy"]})
+    if run_type == "centr": 
+        accs_subjects_centr.setdefault(n_neurons, [])
+        accs_subjects_centr[n_neurons].append(class_report["accuracy"])
     else:
-        accs_subjects_nofed[subj][n_neurons] = class_report["accuracy"]
+        accs_subjects_nofed[subj][n_neurons].append(class_report["accuracy"])
 
     actual_exec += 1
     percentage = round((actual_exec / total_execs) * 100, 2)
@@ -584,8 +585,18 @@ def run():
         create_subjects_datasets(True)
 
     subjects_to_ld=random.sample(range(1, 31), int(subjects_number))
+    #subjects_to_ld = [9, 10, 11]
+    #subjects_to_ld = [8, 13, 28, 12, 13] 
+    #subjects_to_ld = [1, 2, 3, 4, 5, 6, 7, 25, 30]
+    #subjects_to_ld = [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29]
 
     #calculate_class_distribution()
+    
+    # cluster 1: [1, 2, 3, 4, 5, 6, 7, 25, 30]
+    # cluster 2: [9, 10, 11]
+    # cluster 3: [8, 13, 28, 12, 13]
+    # cluster 4: [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29]
+    #
 
     trainX, trainy, testX, testy = load_subjects_dataset(subjects_to_ld, "concat")
     trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated")
@@ -599,23 +610,26 @@ def run():
     print("trainy ", trainy.shape)
     print("testX ", testX.shape)
     print("testy ", testy.shape)
-   
-    for dim in range(min_som_dim, max_som_dim + step, step):
-        current_som_dim = dim
-        
-        if federated:
-            accs_fed = train_federated(5) 
-            accs_subjects_fed.update({current_som_dim: accs_fed})
-        
-        if single:
-            train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, "no-centr")
 
-        if centralized:
-            train_centr(trainX, trainy, testX, testy, "centr")
-            
+    execution_num = 4
 
-    calculate_subjects_accs_mean(accs_subjects_nofed, accs_subjects_fed, accs_subjects_centr, min_som_dim, max_som_dim, step, mean_path, subjects_to_ld, centralized, single, federated)
+    for execution in range(execution_num):
+        for dim in range(min_som_dim, max_som_dim + step, step):
+            current_som_dim = dim
+            if federated:
+                accs_fed = train_federated(5) 
+                accs_subjects_fed.setdefault(current_som_dim, [])
+                accs_subjects_fed[current_som_dim].append(accs_fed)
+
+            if single:
+                train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, "no-centr")
+            if centralized:
+                train_centr(trainX, trainy, testX, testy, "centr")
+    
+    calculate_subjects_accs_mean(accs_subjects_nofed, accs_subjects_fed, accs_subjects_centr, min_som_dim, max_som_dim, step, mean_path, subjects_to_ld, centralized, single, federated, execution_num)
     plot_fed_nofed_centr_comp(mean_path, min_som_dim, max_som_dim, step, centralized, single, federated)
+    plot_cluster_comparison(mean_path, min_som_dim, max_som_dim, step, centralized, single, federated, execution_num)
+
 
 
 
