@@ -7,7 +7,7 @@ import random
 import flwr as fl
 import ray
 import json
-
+import itertools
 
 from logging import INFO, DEBUG
 from flwr.common.logger import log
@@ -15,11 +15,9 @@ from typing import Dict, Tuple, List
 from sklearn.metrics import classification_report
 from minisom import MiniSom
 from flwr.common import NDArrays, Scalar, Metrics
-from utils import init_directories, load_subjects_dataset, create_subjects_datasets, calculate_class_distribution
-from anovaf import get_anovaf
-from plots import plot_fed_nofed_centr_comp, plot_som_comp_dim
-from plots import plot_som, plot_cluster_comparison
-from ML_utils import calculate_subjects_accs_mean
+from utils import init_directories, load_subjects_dataset, create_subjects_datasets, calculate_class_distribution, onehot_decoding, filter_list_by_index
+from plots import plot_fed_nofed_centr_comp, plot_som_comp_dim, plot_boxplot, plot_som, plot_cluster_comparison
+from ML_utils import calculate_subjects_accs_mean, save_accuracies, save_federated_combination, filter_combinations, find_missing_element, get_saved_combinations_accs
 
 # input parameter: 
 #   1) gen / load: genera il dataset dei singoli soggetti o carica quello già creato
@@ -36,8 +34,9 @@ plot_labels_lst = []
 accs_subjects_nofed = {}
 accs_subjects_fed = {}
 accs_subjects_centr = {}
-y = list()
-new_y_test = list()
+single_accs_combinations = {}
+federated_accs_combinations = {}
+centr_accs_combinations = {}
 
 
 # default setup delle variabili di path e parametri
@@ -47,9 +46,10 @@ plots_path = "plots UCI"
 mod_path = "som_models UCI"
 np_arr_path = "np_arr UCI"
 mean_path = "subjects_accs mean"
+accs_path = "subjects_accs"
 dataset_type = "split"
-min_som_dim = 10
-max_som_dim = 50
+min_som_dim = 20
+max_som_dim = 20
 current_som_dim = min_som_dim
 old_som_dim = 0
 step = 10
@@ -90,6 +90,7 @@ init_directories(w_path, plots_path, mod_path, np_arr_path, mean_path)
 
 
 train_iter_lst = [100]  # , 250, 500, 750, 1000, 5000, 10000, 100000
+dimensions = [10]
 
 divider = 10000
 range_lst = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
@@ -178,7 +179,7 @@ class SomClient(fl.client.NumPyClient):
             output_dict=True,
         )
 
-        return float(0), len(self.Xtest), {"accuracy": float(class_report["accuracy"])}
+        return float(0), len(self.Xtest), {"accuracy": float(class_report["accuracy"]), "weights": get_parameters(self.som)[0]}
 
 
 def client_fn(cid) -> SomClient:
@@ -213,14 +214,16 @@ def weighted_simple_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     return {"w_accuracy": sum(w_accuracies) / sum(examples), "s_accuracy": sum(s_accuracies)/clients_num}
 
 def simple_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
+    
     s_accuracies = [m["accuracy"] for _, m in metrics]
+    weights = [m["weights"] for _, m in metrics]
     clients_num = len(metrics)
     # Aggregate and return custom metric (weighted average)
-    return {"accuracy": sum(s_accuracies)/clients_num}
+    return {"accuracy": sum(s_accuracies)/clients_num, "weights": weights[0]}
 ######
 
 
-def train_federated(num_rounds):
+def train_federated(num_rounds, num_clients):
     #definiamo come strategia FedAvg che 
     # FedAvg takes the 100 model updates and, as the name suggests, 
     # averages them. To be more precise, it takes the weighted average 
@@ -235,41 +238,187 @@ def train_federated(num_rounds):
    strategy = fl.server.strategy.FedAvg(
        fraction_fit=1.0,
        fraction_evaluate=1.0,
-       min_fit_clients=int(subjects_number),
-       min_evaluate_clients=int(subjects_number),
-       min_available_clients=int(subjects_number),
+       min_fit_clients=int(num_clients),
+       min_evaluate_clients=int(num_clients),
+       min_available_clients=int(num_clients),
        evaluate_metrics_aggregation_fn=simple_average,
    )
    client_resources = None
    hist = fl.simulation.start_simulation(
        client_fn = client_fn,
-       num_clients = int(subjects_number),
+       num_clients = int(num_clients),
        config = fl.server.ServerConfig(num_rounds=num_rounds),
        strategy = strategy,
        client_resources = client_resources,
    )
    #    ray_init_args = {"num_cpus": 2, "num_gpus":0.0}
-   return hist.metrics_distributed
+   return hist.metrics_distributed["accuracy"], hist.metrics_distributed["weights"]
 
 def train_centr(trainX, trainy, testX, testy, run_type):
     run_training_nofed(trainX, trainy, testX, testy, run_type)
 
+def train_combinations_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dimension, run_type):
+
+    global single_accs_combinations
+    # devo ottenere tutte le possibili combinazioni di coppie di soggetti
+    # conviene lavorare su un array di indici e poi prendere il test e il train corrispondente dalle liste.
+    combinations = list(itertools.combinations(subjects_to_ld, 2))
+    single_accs_combinations.setdefault(dimension, [])
+    # per ogni combinazione devo eseguire il train sul secondo e il test sul primo
+    for combination in combinations:
+        trainX = trainX_lst[combination[1] - 1]
+        trainy = trainy_lst[combination[1] - 1]
+        testX = testX_lst[combination[0] - 1]
+        testy = testy_lst[combination[0] - 1]
+
+        accuracy = run_training_single(trainX, trainy, testX, testy, dimension, run_type)
+        single_accs_combinations[dimension].append(accuracy)
+                
+
+def run_training_single(trainX, trainy, testX, testy, neurons, run_type):
+    # eseguiamo il train e testiamo l'accuracy sul test
+    n_neurons = m_neurons = neurons
+    new_y_test = onehot_decoding(testy)
+
+    som = MiniSom(
+        n_neurons,
+        m_neurons,
+        trainX.shape[1],
+        sigma=5,
+        learning_rate=0.1,
+        neighborhood_function="gaussian",
+        activation_distance="manhattan",
+    )
+    som.random_weights_init(trainX)
+    som.train_random(trainX, 100, verbose=False)
+
+    class_report = classification_report(
+       new_y_test,
+       classify(
+           som,
+           testX,
+           trainX,
+           trainy,
+           n_neurons,
+           100,
+           0,
+           run_type,
+       ),
+       zero_division=0.0,
+       output_dict=True,
+    )
+
+    return class_report["accuracy"]
+
+
+def train_combinations_federated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dimension, combinations):
+
+    global federated_accs_combinations
+    global fed_Xtrain
+    global fed_ytrain
+    global fed_Xtest
+    global fed_ytest
+
+    print("dim", dimension)
+    filtered_combinations = filter_combinations(combinations, dimension)
+    federated_accs_combinations.setdefault(dimension, [])
+    print("subjects", subjects_to_ld)
+    print("combinations", len(filtered_combinations))
+    
+    saved_accs = get_saved_combinations_accs(dimension)
+    for accuracy in saved_accs:
+        federated_accs_combinations[dimension].append(accuracy)
+
+    for combination in filtered_combinations:
+    
+        test_subject = find_missing_element(combination, 1, 31)
+        fed_Xtrain = filter_list_by_index(trainX_lst, combination)
+        fed_ytrain = filter_list_by_index(trainy_lst, combination)
+        fed_Xtest = filter_list_by_index(testX_lst, combination)
+        fed_ytest = filter_list_by_index(testy_lst, combination)
+    
+        loocv_Xtrain = trainX_lst[test_subject[0] - 1]
+        loocv_ytrain = trainy_lst[test_subject[0] - 1]
+        loocv_Xtest = testX_lst[test_subject[0] - 1]
+        loocv_ytest = testy_lst[test_subject[0] - 1]
+        _, weights = train_federated(5, len(fed_Xtrain))
+        accuracy = test_combination_federated(loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest, dimension, weights)
+        save_federated_combination(test_subject, accuracy, dimension)
+        federated_accs_combinations[dimension].append(accuracy)
+
+
+def test_combination_federated(loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest, dim, weights ):
+     # una volta presi i pesi devo creare un instanza di una som
+    # in cui caricare i pesi ed eseguire il test
+    som = MiniSom(
+            dim,
+            dim,
+            loocv_Xtrain.shape[1],
+            sigma=5,
+            learning_rate=0.1,
+            neighborhood_function="gaussian",
+            activation_distance="manhattan",)
+    som._weights = weights[-1][1]
+
+    new_y_test = onehot_decoding(loocv_ytest)
+    class_report = classification_report(
+        new_y_test,
+        classify_fed(
+            som,
+            loocv_Xtest,
+            loocv_Xtrain,
+            loocv_ytrain,
+        ),
+        zero_division=0.0,
+        output_dict=True,
+    )
+
+    return class_report["accuracy"]    
+
+def train_combinations_centralized(dimension, combinations):
+
+    centr_accs_combinations.setdefault(dimension, [])
+    for combination in combinations:
+        trainX, trainy, testX, testy = load_subjects_dataset(combination, "concat")
+        print("trainx", trainX.shape)
+        test_subject = find_missing_element(combination, 1, 31)
+        loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest = load_subjects_dataset(test_subject, "concat")
+
+        # eseguire il train sul dataset concatenato
+        accuracy = run_training_centr(trainX, trainy, loocv_Xtest, loocv_ytest, dimension)
+        centr_accs_combinations[dimension].append(accuracy)
+        
+
+
+def run_training_centr(trainX, trainy, testX, testy, neurons):
+    # eseguiamo il train e testiamo l'accuracy sul test
+    n_neurons = m_neurons = neurons
+    new_y_test = onehot_decoding(testy)
+
+    som = MiniSom(
+        n_neurons,
+        m_neurons,
+        trainX.shape[1],
+        sigma=5,
+        learning_rate=0.1,
+        neighborhood_function="gaussian",
+        activation_distance="manhattan",
+    )
+    som.random_weights_init(trainX)
+    som.train_random(trainX, 100, verbose=False)
+
+    class_report = classification_report(new_y_test, classify_fed(som, testX, trainX, trainy),  zero_division=0.0, output_dict=True)
+    return class_report["accuracy"]
+
 def train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, run_type):
     global actual_exec
     global accs_subjects_nofed
-
-    # deve essere eseguito il train e il test su
-    # "subjects_number" dataset separati e poi bisogna salvarne la media
+   
     for subj_idx, subj in enumerate(subjects_to_ld):
-        print("trainX sub", trainX_lst[subj_idx].shape)
-        print("trainy sub", trainy_lst[subj_idx].shape)
-        print("testX sub", testX_lst[subj_idx].shape)
-        print("testy sub", testy_lst[subj_idx].shape)
         accs_subjects_nofed.setdefault(subj,{})
         accs_subjects_nofed[subj].setdefault(current_som_dim, [])
         actual_exec = 0
         run_training_nofed(trainX_lst[subj_idx], trainy_lst[subj_idx], testX_lst[subj_idx], testy_lst[subj_idx], run_type ,subj)
-
 
 
 def classify(som, data, X_train, y_train, neurons, train_iter, subj, run_type):
@@ -283,6 +432,7 @@ def classify(som, data, X_train, y_train, neurons, train_iter, subj, run_type):
 
     centr_type = "centr"
     fed_type = "no-fed"
+    y = onehot_decoding(y_train)
     
     if not run_type == "centr":
         centr_type = "no-centr"
@@ -363,6 +513,7 @@ def execute_minisom_anova(
     # calcolo risultati utilizzando diversi valori anova avg
     accuracies = []
     n_neurons = 0
+    new_y_test = onehot_decoding(y_test)
     
     centr_type = "centr"
     fed_type = ""
@@ -537,19 +688,9 @@ def execute_minisom_anova(
     print("\rProgress: ", percentage, "%", end="")
 
 
-
 def run_training_nofed(trainX, trainy, testX, testy, run_type ,subj=0):
-    y.clear()
-    new_y_test.clear()
+   
     global accs_subjects_nofed
-
-    for idx, item in enumerate(trainy):
-        # inserisco in y gli index di ogni classe invertendo il one-hot encode
-        y.append(np.argmax(trainy[idx]))
-
-    for idx, item in enumerate(testy):
-        # inserisco in new_test_y gli index di ogni classe invertendo il one-hot encode
-        new_y_test.append(np.argmax(testy[idx]))
     
     accs_tot = []
     for j in range(1, exec_n + 1, 1):
@@ -585,51 +726,30 @@ def run():
         create_subjects_datasets(True)
 
     subjects_to_ld=random.sample(range(1, 31), int(subjects_number))
-    #subjects_to_ld = [9, 10, 11]
-    #subjects_to_ld = [8, 13, 28, 12, 13] 
-    #subjects_to_ld = [1, 2, 3, 4, 5, 6, 7, 25, 30]
-    #subjects_to_ld = [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29]
-
+    subjects_to_ld.sort()
+    print("subjects", subjects_to_ld)
     #calculate_class_distribution()
-    
-    # cluster 1: [1, 2, 3, 4, 5, 6, 7, 25, 30]
-    # cluster 2: [9, 10, 11]
-    # cluster 3: [8, 13, 28, 12, 13]
-    # cluster 4: [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29]
-    #
 
-    trainX, trainy, testX, testy = load_subjects_dataset(subjects_to_ld, "concat")
     trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated")
 
-    fed_Xtrain = trainX_lst
-    fed_ytrain = trainy_lst
-    fed_Xtest = testX_lst
-    fed_ytest = testy_lst
+   
+    # calcolo tutte le combinazioni possibili in cui ci sono 29 elementi
+    # e uno rimane fuori
+    combinations = list(itertools.combinations(subjects_to_ld, len(subjects_to_ld) - 1))
 
-    print("trainX ", trainX.shape)
-    print("trainy ", trainy.shape)
-    print("testX ", testX.shape)
-    print("testy ", testy.shape)
 
-    execution_num = 4
-
-    for execution in range(execution_num):
-        for dim in range(min_som_dim, max_som_dim + step, step):
-            current_som_dim = dim
-            if federated:
-                accs_fed = train_federated(5) 
-                accs_subjects_fed.setdefault(current_som_dim, [])
-                accs_subjects_fed[current_som_dim].append(accs_fed)
-
-            if single:
-                train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, "no-centr")
-            if centralized:
-                train_centr(trainX, trainy, testX, testy, "centr")
+    for dim in dimensions:
+        current_som_dim = dim
+        if federated:
+            train_combinations_federated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dim, combinations)
+           
+        if single:
+            train_combinations_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dim, "no-centr")
+        if centralized:
+            train_combinations_centralized(dim, combinations)
+    save_accuracies(single_accs_combinations, federated_accs_combinations, centr_accs_combinations, accs_path, dimensions)
+    plot_boxplot(dimensions, accs_path)
     
-    calculate_subjects_accs_mean(accs_subjects_nofed, accs_subjects_fed, accs_subjects_centr, min_som_dim, max_som_dim, step, mean_path, subjects_to_ld, centralized, single, federated, execution_num)
-    plot_fed_nofed_centr_comp(mean_path, min_som_dim, max_som_dim, step, centralized, single, federated)
-    plot_cluster_comparison(mean_path, min_som_dim, max_som_dim, step, centralized, single, federated, execution_num)
-
 
 
 

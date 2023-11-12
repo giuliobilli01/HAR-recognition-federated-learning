@@ -505,6 +505,25 @@ def plot_cluster_comparison(mean_path, min_som_dim, max_som_dim, step, centraliz
                 + ".png"
             )
             plt.close()
+
+
+def plot_boxplot(dimensions, accs_path):
+    accuracies_dict = {}
+    if os.path.exists("./" + accs_path + "/" + "accs.txt"): 
+        with open ("./" + accs_path + "/" + "accs.txt") as js:
+            data = json.load(js)
+            accuracies_dict = data
+    plot_xlabel = ["Single", "Federated", "Centralized"]
+    for dim in dimensions:
+        fig, ax = plt.subplots()
+        data = [accuracies_dict["single"][str(dim)], accuracies_dict["federated"][str(dim)], accuracies_dict["centralized"][str(dim)] ]
+        ax.boxplot(data)
+        ax.set(xlabel = "Methods", ylabel= "Accuracies")
+        ax.set_xticklabels(plot_xlabel, fontsize=8)
+       
+        plt.savefig("./" + accs_path + "/boxplot" + str(dim) + ".png")
+
+
             
 
 

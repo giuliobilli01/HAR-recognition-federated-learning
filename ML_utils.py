@@ -3,6 +3,11 @@ import sys
 import json
 import os
 
+
+def find_missing_element(elem_list, start, end):
+    test_array = np.array(elem_list)
+    return np.setdiff1d(np.arange(start, end), test_array)
+
 # balance data
 def balance_data(X_train, y_train, X_test, y_test):
     X = np.concatenate((X_train, X_test))
@@ -88,3 +93,72 @@ def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, 
         json.dump(mean_dict, fp, indent=4)
 
 
+def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensions):
+    accs_dict = {}
+    if os.path.exists("./" + accs_path + "/" + "accs.txt"): 
+        with open ("./" + accs_path + "/"  + "accs.txt") as js:
+            data = json.load(js)
+            accs_dict = data
+
+    accs_dict.setdefault("single", {})
+    accs_dict.setdefault("federated", {})
+    accs_dict.setdefault("centralized", {})
+    
+    for dim in dimensions:
+        accs_dict["single"].update({str(dim): single_accs[dim]})
+        accs_dict["federated"].update({str(dim): federated_accs[dim]})
+        accs_dict["centralized"].update({str(dim): centr_accs[dim]})
+
+
+    print("accs dict", accs_dict)
+
+    with open("./" + accs_path + "/" + "accs.txt", "w") as fp:
+        json.dump(accs_dict, fp, indent=4)
+
+
+def save_federated_combination(test_sub, accuracy, dimension):
+    combination_dict = {}
+    if os.path.exists(f"./combinations/accs{dimension}.txt"): 
+        with open (f"./combinations/accs{dimension}.txt") as js:
+            data = json.load(js)
+            combination_dict = data
+
+    combination_dict.setdefault(str(test_sub[0]), 0)
+    combination_dict[str(test_sub[0])] = accuracy
+
+    print("comb dict", combination_dict)
+    with open(f"./combinations/accs{dimension}.txt", "w") as fp:
+        json.dump(combination_dict, fp, indent=4)
+
+
+def filter_combinations(combinations, dimension):
+    combination_dict = {}
+    if os.path.exists(f"./combinations/accs{dimension}.txt"): 
+        with open (f"./combinations/accs{dimension}.txt") as js:
+            data = json.load(js)
+            combination_dict = data
+    
+    print("before comb", len(combinations))
+    tested_subjects_keys = combination_dict.keys()
+    tested_subjects = []
+    for sub in tested_subjects_keys:
+        tested_subjects.append(int(sub))
+
+    filtered_comb = []
+    for index, combination in enumerate(combinations):
+        test_subject = find_missing_element(combination, 1, 31)
+        if not test_subject[0] in tested_subjects:
+            filtered_comb.append(combination)    
+
+    return filtered_comb
+    
+
+def get_saved_combinations_accs(dimension):
+    combination_dict = {}
+    if os.path.exists(f"./combinations/accs{dimension}.txt"): 
+        with open (f"./combinations/accs{dimension}.txt") as js:
+            data = json.load(js)
+            combination_dict = data
+    accuracies = combination_dict.values()
+
+    return accuracies

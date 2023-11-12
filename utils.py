@@ -101,7 +101,6 @@ def create_subjects_datasets(anova_selection):
     sub_map = np.concatenate((sub_map_train, sub_map_test))
 
     train_subjects = np.unique(sub_map)
-    print("train_subjects", train_subjects)
 
     # carico e unisco il dataset (considerando 265 feature)
     uci_x_train, uci_y_train = load_dataset_group("train", pathPrefix, 265)
@@ -118,7 +117,6 @@ def create_subjects_datasets(anova_selection):
 
     anova_X = np.concatenate((anova_x_train, anova_x_test))
 
-    print("anova_X", anova_X.shape)
 
     X = np.concatenate((uci_x_train, uci_x_test))
     y = np.concatenate((uci_y_train, uci_y_test))
@@ -158,8 +156,7 @@ def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix=""):
         s_X = load_file(pathX)
         s_y = load_file(pathy)
 
-        print("s X", s_X.shape)
-        print("s y", s_y.shape)
+       
 
         X_lst.append(s_X)
         y_lst.append(s_y)
@@ -168,8 +165,7 @@ def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix=""):
         X = np.concatenate(X_lst, axis=0)
         y = np.concatenate(y_lst, axis=0)
 
-        print("X", X.shape)
-        print("y", y.shape)
+      
 
         return X, y
     else:
@@ -211,12 +207,8 @@ def load_uci_dataset(pathPrefix, numFeat):
     # load train dataset
     trainX, trainy = load_dataset_group("train", pathPrefix + "/", numFeat)
 
-    print(trainX.shape, trainy.shape)
-
     # load test dataset
     testX, testy = load_dataset_group("test", pathPrefix + "/", numFeat)
-
-    print(testX.shape, testy.shape)
 
    
     # zero-offset class values to perform one-hot encode (default values 1-6)
@@ -267,13 +259,10 @@ def calculate_class_distribution():
     pathPrefix = "./UCI HAR Dataset split/"
 
     subjects_to_ld=np.arange(1,31)
-    print("subs to ld", subjects_to_ld)
 
     trainX, trainy = load_subjects_group("train", subjects_to_ld, "separated", pathPrefix)
     testX, testy = load_subjects_group("test", subjects_to_ld, "separated", pathPrefix)
 
-    print("len testy", testy[0].shape)
-    print("len trainy", trainy[0].shape)
 
     # per ogni soggetto devo contare quanti elementi ha per ogni classe
     subjects_dictionary = {}
@@ -293,7 +282,6 @@ def calculate_class_distribution():
         subjects.append(elem)
 
     splitted_subjects = split_list(subjects)
-    print("splitted", splitted_subjects)
 
     for idx, subjects_chunck in enumerate(splitted_subjects):
         plot_class_distribution(subjects_chunck, subjects_dictionary, idx + 1)
@@ -319,7 +307,6 @@ def plot_class_distribution(subjects, subjects_dictionary, idx_group):
         multiplier += 1
     
     # Add some text for labels, title and custom x-axis tick labels, etc.
-    print(subjects)
     ax.set_ylabel('Number of elements')
     ax.set_title(f'Class ditributions subs({(idx_group - 1)*3}-{idx_group * 3})')
     ax.set_xticks(x + width, subjects)
@@ -331,4 +318,21 @@ def plot_class_distribution(subjects, subjects_dictionary, idx_group):
 
 
 
+def onehot_decoding(classes):
+    decoded = list()
+    for idx, item in enumerate(classes):
+        # inserisco in y gli index di ogni classe invertendo il one-hot encode
+        decoded.append(np.argmax(classes[idx]))
+    return decoded
+
+
+def filter_list_by_index(values_list, index_list):
+    filtered_list = []
+    index_lst = list(index_list)
+    for index, elem in enumerate(index_lst):
+        index_lst[index] -= 1
         
+    for index, value in enumerate(values_list):
+        if index in index_lst:
+            filtered_list.append(value)
+    return filtered_list
