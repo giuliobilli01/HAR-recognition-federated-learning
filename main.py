@@ -90,7 +90,7 @@ init_directories(w_path, plots_path, mod_path, np_arr_path, mean_path)
 
 
 train_iter_lst = [100]  # , 250, 500, 750, 1000, 5000, 10000, 100000
-dimensions = [10]
+dimensions = [15, 30]
 
 divider = 10000
 range_lst = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
@@ -243,7 +243,7 @@ def train_federated(num_rounds, num_clients):
        min_available_clients=int(num_clients),
        evaluate_metrics_aggregation_fn=simple_average,
    )
-   client_resources = None
+   client_resources = {"num_cpus": 1, "num_gpus":0.5}
    hist = fl.simulation.start_simulation(
        client_fn = client_fn,
        num_clients = int(num_clients),
