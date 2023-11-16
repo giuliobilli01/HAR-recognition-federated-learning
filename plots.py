@@ -507,23 +507,88 @@ def plot_cluster_comparison(mean_path, min_som_dim, max_som_dim, step, centraliz
             plt.close()
 
 
+def define_box_properties(plot_groups, color_codes, labels):
+   
+    for idx, plot in enumerate(plot_groups):
+        print("dix", idx)
+        plt.plot([], c=color_codes[idx], label=labels[idx])
+        plt.legend()
+        
+
+
 def plot_boxplot(dimensions, accs_path):
     accuracies_dict = {}
     if os.path.exists("./" + accs_path + "/" + "accs.txt"): 
         with open ("./" + accs_path + "/" + "accs.txt") as js:
             data = json.load(js)
             accuracies_dict = data
-    plot_xlabel = ["Single", "Federated", "Centralized"]
-    for dim in dimensions:
-        fig, ax = plt.subplots()
-        data = [accuracies_dict["single"][str(dim)], accuracies_dict["federated"][str(dim)], accuracies_dict["centralized"][str(dim)] ]
-        ax.boxplot(data)
-        ax.set(xlabel = "Methods", ylabel= "Accuracies")
-        ax.set_xticklabels(plot_xlabel, fontsize=8)
-       
-        plt.savefig("./" + accs_path + "/boxplot" + str(dim) + ".png")
+    # raggruppo i vari dati per le diverse dimensioni
+    
+    ten_lst = []
+    fifteen_lst = []
+    twenty_lst = []
+    thirty_lst = []
+    for key in accuracies_dict.keys():
+        ten_lst.append(accuracies_dict[key]["10"]) 
+        fifteen_lst.append(accuracies_dict[key]["15"])
+        twenty_lst.append(accuracies_dict[key]["20"] )
+        thirty_lst.append(accuracies_dict[key]["30"])
+    
+    colors = ['red', 'lightblue', 'lightgreen', 'orange']
 
+    data_groups = [ten_lst, fifteen_lst, twenty_lst, thirty_lst]
 
-            
+    labels_lst = ["Single", "Federated", "Centralized"]
 
+    width = 1/len(labels_lst)
+
+    xlocations  = [ x*((1+ len(data_groups))*width) for x in range(len(ten_lst)) ]
+
+    symbol      = 'r+'
+    ymin        = min ( [ val  for dg in data_groups  for data in dg for val in data ] )
+    ymax        = max ( [ val  for dg in data_groups  for data in dg for val in data ])
+
+    ax = plt.gca()
+    ax.set_ylim(ymin,ymax)
+
+    ax.grid(True, linestyle='dotted')
+    ax.set_axisbelow(True)
+
+    plt.ylabel('Accuracies')
+    plt.title('title')
+
+    space = len(data_groups)/2
+    offset = len(data_groups)/2
+
+    group_positions = []
+    for num, dg in enumerate(data_groups):    
+        _off = (0 - space + (0.5+num))
+        print(_off)
+        group_positions.append([x+_off*(width+0.01) for x in xlocations])
+
+    for dg, pos, c in zip(data_groups, group_positions, colors):
+        boxes = ax.boxplot(dg, 
+                    sym=symbol,
+                    labels=['']*len(labels_lst),
+        #            labels=labels_list,
+                    positions=pos, 
+                    widths=width, 
+                    boxprops=dict(facecolor=c),
+        #             capprops=dict(color=c),
+        #            whiskerprops=dict(color=c),
+        #            flierprops=dict(color=c, markeredgecolor=c),                       
+                    medianprops=dict(color='grey'),
+        #           notch=False,  
+        #           vert=True, 
+        #           whis=1.5,
+        #           bootstrap=None, 
+        #           usermedians=None, 
+        #           conf_intervals=None,
+                    patch_artist=True,
+                    )
+    ax.set_xticks( xlocations )
+    ax.set_xticklabels( labels_lst, rotation=0 )
+    define_box_properties(data_groups, colors, ["10", "15", "20", "30"])
+
+    plt.savefig("./" + accs_path + "/boxplot.png")
 
