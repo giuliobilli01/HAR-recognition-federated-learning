@@ -812,3 +812,235 @@ History (metrics, distributed, evaluate):
     #subjects_to_ld = [8, 13, 28, 12, 13] 
     #subjects_to_ld = [1, 2, 3, 4, 5, 6, 7, 25, 30]
     #subjects_to_ld = [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29]
+
+
+
+    def train_nofederated(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, run_type):
+    global actual_exec
+    global accs_subjects_nofed
+   
+    for subj_idx, subj in enumerate(subjects_to_ld):
+        accs_subjects_nofed.setdefault(subj,{})
+        accs_subjects_nofed[subj].setdefault(current_som_dim, [])
+        actual_exec = 0
+        run_training_nofed(trainX_lst[subj_idx], trainy_lst[subj_idx], testX_lst[subj_idx], testy_lst[subj_idx], run_type ,subj)
+
+
+    
+    
+    def run_training_nofed(trainX, trainy, testX, testy, run_type ,subj=0):
+   
+    global accs_subjects_nofed
+    
+    accs_tot = []
+    for j in range(1, exec_n + 1, 1):
+                execute_minisom_anova(
+                    X_train=trainX,
+                    y_train=trainy,
+                    X_test=testX,
+                    y_test=testy,
+                    neurons=current_som_dim,
+                    train_iter=train_iter_lst[0],
+                    accs_tot_avg=accs_tot,
+                    subj=subj,
+                    run_type=run_type
+                )
+
+
+def execute_minisom_anova(
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    neurons,
+    train_iter,
+    accs_tot_avg,
+    subj,
+    run_type,
+):
+    global old_som_dim
+    global current_som_dim
+    global exec_n
+    global total_execs
+    global actual_exec
+
+    # calcolo risultati utilizzando diversi valori anova avg
+    accuracies = []
+    n_neurons = 0
+    new_y_test = onehot_decoding(y_test)
+    
+    centr_type = "centr"
+    fed_type = ""
+    
+    if not run_type == "centr":
+        centr_type = "no-centr"
+    
+        if run_type == "no-fed":
+            fed_type = "no-fed"
+    
+
+    n_neurons = m_neurons = neurons
+    som = MiniSom(
+        n_neurons,
+        m_neurons,
+        X_train.shape[1],
+        sigma=5,
+        learning_rate=0.1,
+        neighborhood_function="gaussian",
+        activation_distance="manhattan",
+    )
+    som.random_weights_init(X_train)
+    som.train_random(X_train, train_iter, verbose=False)  # random training
+    #som.train_batch(X_lower_anova, train_iter, verbose=False)
+    if save_data == 'y':
+        if not centr_type == "centr":
+            if not os.path.exists('./' + mod_path + "/" + centr_type + "/" + fed_type + '/' + "subject-" + str(subj) + '/'):
+                os.mkdir('./' + mod_path + "/" + centr_type + "/" + fed_type + '/' + "subject-" + str(subj) + '/')
+        if not os.path.exists('./' + mod_path + "/" + centr_type + "/" + fed_type + '/' + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "") ):
+            os.mkdir('./' + mod_path + "/" + centr_type + "/" + fed_type + '/' + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "") )
+    if not centr_type == "centr":
+        if not os.path.exists(
+            "./"
+            + plots_path
+            +"/" + centr_type + "/" + fed_type
+            + "/subject-" + str(subj) + "/"
+        ):
+            os.mkdir(
+                "./"
+                + plots_path
+                +"/" + centr_type + "/" + fed_type
+                + "/subject-" + str(subj) + "/"
+            )
+    
+    if not os.path.exists(
+        "./"
+        + plots_path
+        +"/" + centr_type + "/" + fed_type
+        + ( "/subject-" + str(subj) + "/" if not run_type=="centr" else "")
+        + "/som_"
+        + str(n_neurons)
+    ):
+        os.mkdir(
+            "./"
+            + plots_path
+            +"/" + centr_type + "/" + fed_type
+            + ( "/subject-" + str(subj) + "/" if not run_type=="centr" else "")
+            + "/som_"
+            + str(n_neurons)
+        )
+    if save_data == "y":
+        plot_som(
+            som,
+            X_train,
+            y_train,
+            "./"
+            + plots_path
+            +"/" + centr_type + "/" + fed_type
+            + ( "/subject-" + str(subj) + "/" if not run_type=="centr" else "")
+            + "/som_"
+            + str(n_neurons)
+            + "/som_iter-"
+            + str(train_iter)
+            + "_plot_",
+            X_train.shape[1],
+            save_data,
+            subjects_number,
+            str(subj),
+            run_type=="centr",
+        )
+    w = som.get_weights()
+    #La notazione -1 in una delle dimensioni indica a NumPy di inferire
+    #automaticamente la dimensione in modo tale da mantenere il numero 
+    #totale di elementi invariato. In questo caso, viene inferito in modo 
+    #tale da mantenere il numero di elementi nella terza dimensione 
+    #(l'ultimo elemento di w.shape) invariato.
+    w = w.reshape((-1, w.shape[2]))
+    #if not old_som_dim == current_som_dim:
+    if save_data == "y":
+        if not centr_type=="centr":
+            if not os.path.exists(
+            "./" + np_arr_path +"/" + centr_type + "/" + fed_type + "/"+ "subject-" + str(subj) + "/"
+        ):
+                os.mkdir(
+                    "./"
+                    + np_arr_path
+                    +"/" + centr_type + "/" + fed_type
+                    + "/subject-" + str(subj)
+                    + "/"
+                )   
+            
+        if not os.path.exists(
+            "./" + np_arr_path +"/" + centr_type + "/" + fed_type + "/"+  ( "subject-" + str(subj) + "/" if not run_type=="centr" else "") 
+        ):
+            os.mkdir(
+                "./"
+                + np_arr_path
+                +"/" + centr_type + "/" + fed_type
+                + "/"
+                + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "")
+            )   
+        np.savetxt(
+            "./"
+            + np_arr_path
+            +"/" + centr_type + "/" + fed_type
+            + "/"
+            + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "")
+            + "weights_lst_avg_iter-"
+            + str(train_iter)
+            + "_"
+            + "subjects-" + str(subjects_number)
+            + "_"
+            + str(neurons)
+            + ".txt",
+            w,
+            delimiter=" ",
+        )
+        if not centr_type=="centr":
+            if not os.path.exists(
+            "./" + mod_path +"/" + centr_type + "/" + fed_type + "/" + "subject-" + str(subj) + "/"
+        ):
+                os.mkdir(
+                    "./" + mod_path +"/" + centr_type + "/" + fed_type + "/" + "subject-" + str(subj) + "/"
+                )
+        if not os.path.exists(
+            "./" + mod_path +"/" + centr_type + "/" + fed_type + "/" + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "") 
+        ):
+            os.mkdir(
+                "./" + mod_path +"/" + centr_type + "/" + fed_type + "/" + ( "subject-" + str(subj) + "/" if not run_type=="centr" else "")
+            )
+        #old_som_dim = current_som_dim
+    # esegue una divisione per zero quando
+    # un label non è presente tra quelli predetti
+    class_report = classification_report(
+        new_y_test,
+        classify(
+            som,
+            X_test,
+            X_train,
+            y_train,
+            n_neurons,
+            train_iter,
+            subj,
+            run_type,
+        ),
+        zero_division=0.0,
+        output_dict=True,
+    )
+    #save_model(som, mod_path, "avg", str(a_val / divider), str(n_neurons), centr_type, fed_type)
+    accuracies.append(class_report["accuracy"])
+    # insert in accuracy dictionary the accuracy for anova val
+    accs_tot_avg.append(class_report["accuracy"])
+    
+    if run_type == "centr": 
+        accs_subjects_centr.setdefault(n_neurons, [])
+        accs_subjects_centr[n_neurons].append(class_report["accuracy"])
+    else:
+        accs_subjects_nofed[subj][n_neurons].append(class_report["accuracy"])
+
+    actual_exec += 1
+    percentage = round((actual_exec / total_execs) * 100, 2)
+    print("\rProgress: ", percentage, "%", end="")
+
+
+def train_centr(trainX, trainy, testX, testy, run_type):
+    run_training_nofed(trainX, trainy, testX, testy, run_type)

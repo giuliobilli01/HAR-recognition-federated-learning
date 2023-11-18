@@ -3,7 +3,7 @@ import sys
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from ML_utils import balance_data, feature_selection_anova
+from ML_utils import balance_data, feature_selection_anova, feature_selection_with_max
 import pickle
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -93,7 +93,7 @@ def load_dataset_group(group, pathPrefix, numFeat):
     return X, y
 
 
-def create_subjects_datasets(anova_selection):
+def create_subjects_datasets(anova_selection, max_n):
     pathPrefix = "./UCI HAR Dataset/"
     sub_map_train = load_file("./UCI HAR Dataset/train/subject_train.txt")
     sub_map_test = load_file("./UCI HAR Dataset/test/subject_test.txt")
@@ -113,7 +113,8 @@ def create_subjects_datasets(anova_selection):
     var_avg_c, var_min_c  = get_anovaf(uci_x_train, tf.keras.utils.to_categorical(a_y_train), uci_x_test, tf.keras.utils.to_categorical(a_y_test))
     #var_avg_c, var_min_c  = get_anovaF(uci_x_train, tf.keras.utils.to_categorical(a_y_train), uci_x_test, tf.keras.utils.to_categorical(a_y_test))
 
-    anova_x_train, anova_x_test = feature_selection_anova(uci_x_train, uci_x_test, 0.8, var_avg_c)
+    #anova_x_train, anova_x_test = feature_selection_anova(uci_x_train, uci_x_test, 1.0, var_avg_c)
+    anova_x_train, anova_x_test = feature_selection_with_max(uci_x_train, uci_x_test,var_avg_c, max_n)
 
     anova_X = np.concatenate((anova_x_train, anova_x_test))
 
@@ -133,6 +134,10 @@ def create_subjects_datasets(anova_selection):
 
         # split subject dataset in 70% train and 30% test
         s_trainX, s_testX, s_trainy, s_testy = train_test_split(datasetX, datasety, train_size=0.70, random_state=42, shuffle=True, stratify=datasety)
+        print("strainX", s_trainX.shape)
+        print("strainy", s_trainy.shape)
+        print("stestX", s_testX.shape)
+
 
         groups = ["train", "test"]
         # salvo il dataset in file csv
@@ -175,8 +180,8 @@ def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix=""):
     
         
 
-def load_subjects_dataset(subjects_to_ld, output_mode):
-    pathPrefix = "./UCI HAR Dataset split/"
+def load_subjects_dataset(subjects_to_ld, output_mode, dataset_feature):
+    pathPrefix = f"./UCI HAR Dataset split {dataset_feature}/"
 
     trainX, trainy = load_subjects_group("train", subjects_to_ld, output_mode, pathPrefix)
     testX, testy = load_subjects_group("test", subjects_to_ld, output_mode, pathPrefix)

@@ -47,6 +47,23 @@ def feature_selection_anova(X_train, X_test, a_val, varianza_media_classi):
     
     return X_train[:, less_than_anova_vals], X_test[:, less_than_anova_vals]
 
+def feature_selection_with_max(X_train, X_test, varianza_media_classi, max_n):
+    selected_feature_idx = []
+
+    # creo una versione ordinata dei valori anova
+    sorted_anova = sorted(varianza_media_classi)[:max_n]
+    print("sorted", sorted_anova)
+    print("sorted len", len(sorted_anova))
+    
+    for idx, val in enumerate(varianza_media_classi):
+        if val in sorted_anova:
+            selected_feature_idx.append(idx)
+    
+    return X_train[:, selected_feature_idx], X_test[:, selected_feature_idx]
+
+
+
+
 
 def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, max_som_dm, step, mean_path, subjects_loaded, centralized, single, federated, execution_num):
     mean_dict = {}
@@ -100,17 +117,23 @@ def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensio
             data = json.load(js)
             accs_dict = data
 
-    accs_dict.setdefault("single", {})
-    accs_dict.setdefault("federated", {})
-    accs_dict.setdefault("centralized", {})
-    
-    for dim in dimensions:
-        accs_dict["single"].update({str(dim): single_accs[dim]})
-        accs_dict["federated"].update({str(dim): federated_accs[dim]})
-        accs_dict["centralized"].update({str(dim): centr_accs[dim]})
+    accs_dict.setdefault("noloocv", {})
+    accs_dict.setdefault("std-loocv", {})
+    accs_dict.setdefault("feat-loocv", {})
 
+    for loocv_type in ["noloocv", "std-loocv", "feat-loocv"]:
+        accs_dict[loocv_type].setdefault("single", {})
+        accs_dict[loocv_type].setdefault("federated", {})
+        accs_dict[loocv_type].setdefault("centralized", {})
 
     print("accs dict", accs_dict)
+
+    for loocv_type in ["noloocv", "std-loocv", "feat-loocv"]:
+        for dim in dimensions: 
+            accs_dict[loocv_type]["single"].update({str(dim): single_accs[dim]})
+            accs_dict[loocv_type]["federated"].update({str(dim): federated_accs[dim]})
+            accs_dict[loocv_type]["centralized"].update({str(dim): centr_accs[dim]})
+
 
     with open("./" + accs_path + "/" + "accs.txt", "w") as fp:
         json.dump(accs_dict, fp, indent=4)

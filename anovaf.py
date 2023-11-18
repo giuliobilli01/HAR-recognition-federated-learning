@@ -137,6 +137,7 @@ def get_anovaf(X_train, y_train, X_test, y_test):
             end="",
         )
     print("\n")
+    print("anova avg classi", varianza_media_classi)
     # rispettivamente contengono per ogni feature,  la media  tra le  varianze (valori  anova)
     #   e l’altra  che  contiene  il  minimo tra  levarianze.
     return varianza_media_classi, varianza_min_classi

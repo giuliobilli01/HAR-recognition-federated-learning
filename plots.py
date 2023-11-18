@@ -523,72 +523,72 @@ def plot_boxplot(dimensions, accs_path):
             data = json.load(js)
             accuracies_dict = data
     # raggruppo i vari dati per le diverse dimensioni
-    
-    ten_lst = []
-    fifteen_lst = []
-    twenty_lst = []
-    thirty_lst = []
-    for key in accuracies_dict.keys():
-        ten_lst.append(accuracies_dict[key]["10"]) 
-        fifteen_lst.append(accuracies_dict[key]["15"])
-        twenty_lst.append(accuracies_dict[key]["20"] )
-        thirty_lst.append(accuracies_dict[key]["30"])
-    
-    colors = ['red', 'lightblue', 'lightgreen', 'orange']
+    for loocv_type in ["noloocv", "std-loocv","feat-loocv"]:
+        ten_lst = []
+        fifteen_lst = []
+        twenty_lst = []
+        thirty_lst = []
+        for key in accuracies_dict[loocv_type].keys():
+            ten_lst.append(accuracies_dict[loocv_type][key]["10"]) 
+            fifteen_lst.append(accuracies_dict[loocv_type][key]["15"])
+            twenty_lst.append(accuracies_dict[loocv_type][key]["20"] )
+            thirty_lst.append(accuracies_dict[loocv_type][key]["30"])
 
-    data_groups = [ten_lst, fifteen_lst, twenty_lst, thirty_lst]
+        colors = ['red', 'lightblue', 'lightgreen', 'orange']
 
-    labels_lst = ["Single", "Federated", "Centralized"]
+        data_groups = [ten_lst, fifteen_lst, twenty_lst, thirty_lst]
 
-    width = 1/len(labels_lst)
+        labels_lst = ["Single", "Federated", "Centralized"]
 
-    xlocations  = [ x*((1+ len(data_groups))*width) for x in range(len(ten_lst)) ]
+        width = 1/len(labels_lst)
 
-    symbol      = 'r+'
-    ymin        = min ( [ val  for dg in data_groups  for data in dg for val in data ] )
-    ymax        = max ( [ val  for dg in data_groups  for data in dg for val in data ])
+        xlocations  = [ x*((1+ len(data_groups))*width) for x in range(len(ten_lst)) ]
 
-    ax = plt.gca()
-    ax.set_ylim(ymin,ymax)
+        symbol      = 'r+'
+        ymin        = min ( [ val  for dg in data_groups  for data in dg for val in data ] )
+        ymax        = max ( [ val  for dg in data_groups  for data in dg for val in data ])
 
-    ax.grid(True, linestyle='dotted')
-    ax.set_axisbelow(True)
+        ax = plt.gca()
+        ax.set_ylim(ymin,ymax)
 
-    plt.ylabel('Accuracies')
-    plt.title('title')
+        ax.grid(True, linestyle='dotted')
+        ax.set_axisbelow(True)
 
-    space = len(data_groups)/2
-    offset = len(data_groups)/2
+        plt.ylabel('Accuracies')
+        plt.title('title')
 
-    group_positions = []
-    for num, dg in enumerate(data_groups):    
-        _off = (0 - space + (0.5+num))
-        print(_off)
-        group_positions.append([x+_off*(width+0.01) for x in xlocations])
+        space = len(data_groups)/2
+        offset = len(data_groups)/2
 
-    for dg, pos, c in zip(data_groups, group_positions, colors):
-        boxes = ax.boxplot(dg, 
-                    sym=symbol,
-                    labels=['']*len(labels_lst),
-        #            labels=labels_list,
-                    positions=pos, 
-                    widths=width, 
-                    boxprops=dict(facecolor=c),
-        #             capprops=dict(color=c),
-        #            whiskerprops=dict(color=c),
-        #            flierprops=dict(color=c, markeredgecolor=c),                       
-                    medianprops=dict(color='grey'),
-        #           notch=False,  
-        #           vert=True, 
-        #           whis=1.5,
-        #           bootstrap=None, 
-        #           usermedians=None, 
-        #           conf_intervals=None,
-                    patch_artist=True,
-                    )
-    ax.set_xticks( xlocations )
-    ax.set_xticklabels( labels_lst, rotation=0 )
-    define_box_properties(data_groups, colors, ["10", "15", "20", "30"])
+        group_positions = []
+        for num, dg in enumerate(data_groups):    
+            _off = (0 - space + (0.5+num))
+            print(_off)
+            group_positions.append([x+_off*(width+0.01) for x in xlocations])
 
-    plt.savefig("./" + accs_path + "/boxplot.png")
+        for dg, pos, c in zip(data_groups, group_positions, colors):
+            boxes = ax.boxplot(dg, 
+                        sym=symbol,
+                        labels=['']*len(labels_lst),
+            #            labels=labels_list,
+                        positions=pos, 
+                        widths=width, 
+                        boxprops=dict(facecolor=c),
+            #             capprops=dict(color=c),
+            #            whiskerprops=dict(color=c),
+            #            flierprops=dict(color=c, markeredgecolor=c),                       
+                        medianprops=dict(color='grey'),
+            #           notch=False,  
+            #           vert=True, 
+            #           whis=1.5,
+            #           bootstrap=None, 
+            #           usermedians=None, 
+            #           conf_intervals=None,
+                        patch_artist=True,
+                        )
+        ax.set_xticks( xlocations )
+        ax.set_xticklabels( labels_lst, rotation=0 )
+        define_box_properties(data_groups, colors, ["10", "15", "20", "30"])
+
+        plt.savefig("./" + accs_path + "/boxplot.png")
 
