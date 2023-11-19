@@ -87,7 +87,7 @@ init_directories(w_path, plots_path, mod_path, np_arr_path, mean_path)
 
 
 train_iter_lst = [100]  # , 250, 500, 750, 1000, 5000, 10000, 100000
-dimensions = [15, 30]
+dimensions = [10, 15, 20, 30]
 
 divider = 10000
 range_lst = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
@@ -256,7 +256,7 @@ def train_federated(num_rounds, num_clients, loocv_type):
            evaluate_metrics_aggregation_fn=simple_average,
         )
     
-    client_resources = {"num_cpus": 1, "num_gpus":0.5}
+    client_resources = {"num_cpus": 1, "num_gpus":1}
     hist = fl.simulation.start_simulation(
        client_fn = client_fn,
        num_clients = int(num_clients),
@@ -386,14 +386,14 @@ def test_combination_federated(loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_yt
 
     return class_report["accuracy"]    
 
-def train_combinations_centralized(dimension, combinations, loocv_type):
+def train_combinations_centralized(dimension, combinations, loocv_type, num_feat):
 
     centr_accs_combinations[loocv_type].setdefault(dimension, [])
     for combination in combinations:
-        trainX, trainy, testX, testy = load_subjects_dataset(combination, "concat")
+        trainX, trainy, testX, testy = load_subjects_dataset(combination, "concat", num_feat)
         print("trainx", trainX.shape)
         test_subject = find_missing_element(combination, 1, 31)
-        loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest = load_subjects_dataset(test_subject, "concat")
+        loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest = load_subjects_dataset(test_subject, "concat", num_feat)
 
         # eseguire il train sul dataset concatenato
         accuracy = run_training_centr(trainX, trainy, loocv_Xtest, loocv_ytest, dimension)
@@ -503,7 +503,12 @@ def train_loocv_combinations(subjects_to_ld, dim, combinations, loocv_type):
     global accs_subjects_fed
     global accs_subjects_centr
 
-    trainX_lst, trainy_lst, testX_lst, testy_lst = []
+    trainX_lst = []
+    trainy_lst = []
+    testX_lst = []
+    testy_lst = []
+
+    num_feat = "full"
 
     single_accs_combinations.setdefault(loocv_type, {})
     centr_accs_combinations.setdefault(loocv_type, {})
@@ -511,16 +516,22 @@ def train_loocv_combinations(subjects_to_ld, dim, combinations, loocv_type):
     
     if loocv_type == "std-loocv":
         trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full")
+        num_feat = "full"
     elif loocv_type == "feat-loocv":
         
         if dim == 10:
             trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full")
+            num_feat = "full"
         elif dim == 15:
             trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "158")
+            num_feat = "158"
         elif dim == 20:
             trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "89")
+            num_feat = "89"
         elif dim == 30:
             trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "39")
+            num_feat = "39"
+
 
     print("trainX lst shape", trainX_lst[0].shape)
     if federated:
@@ -529,7 +540,7 @@ def train_loocv_combinations(subjects_to_ld, dim, combinations, loocv_type):
     if single:
         train_combinations_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dim, "no-centr", loocv_type)
     if centralized:
-        train_combinations_centralized(dim, combinations, loocv_type)
+        train_combinations_centralized(dim, combinations, loocv_type, num_feat)
 
 
 def train_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dimension):
@@ -580,6 +591,7 @@ def train_noloocv(subjects_to_ld, dim):
     # deve fare il train e test per ogni soggetto
     if single:
         train_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dim)
+        print("single accs", single_accs_combinations)
     # deve fare il federated con train su tutti e 30 e test su tutti e 30
     if federated:
         fed_Xtrain = trainX_lst
@@ -590,7 +602,7 @@ def train_noloocv(subjects_to_ld, dim):
 
         accuracies, _ = train_federated(5, len(fed_Xtrain), "noloocv")
         print("fed accs", accuracies)
-        federated_accs_combinations["noloocv"][dim] = accuracies[-1]
+        federated_accs_combinations["noloocv"][dim] = accuracies[-1][-1]
 
     if centralized:
     # deve fare il centralizzato con tutti e 30 e il test su ognuno
@@ -631,14 +643,14 @@ def run():
     combinations = list(itertools.combinations(subjects_to_ld, len(subjects_to_ld) - 1))
 
 
-    for dim in dimensions:
-        current_som_dim = dim
-        train_noloocv(subjects_to_ld, dim)
-        train_loocv_combinations(subjects_to_ld, dim, combinations, "std-loocv")
-        train_loocv_combinations(subjects_to_ld, dim, combinations, "feat-loocv")
-
-
-    save_accuracies(single_accs_combinations, federated_accs_combinations, centr_accs_combinations, accs_path, dimensions)
+    #for dim in dimensions:
+    #    current_som_dim = dim
+    #    train_noloocv(subjects_to_ld, dim)
+    #    train_loocv_combinations(subjects_to_ld, dim, combinations, "std-loocv")
+    #    train_loocv_combinations(subjects_to_ld, dim, combinations, "feat-loocv")
+#
+#
+    #save_accuracies(single_accs_combinations, federated_accs_combinations, centr_accs_combinations, accs_path, dimensions)
     plot_boxplot(dimensions, accs_path)
     
 

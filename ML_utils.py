@@ -130,9 +130,9 @@ def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensio
 
     for loocv_type in ["noloocv", "std-loocv", "feat-loocv"]:
         for dim in dimensions: 
-            accs_dict[loocv_type]["single"].update({str(dim): single_accs[dim]})
-            accs_dict[loocv_type]["federated"].update({str(dim): federated_accs[dim]})
-            accs_dict[loocv_type]["centralized"].update({str(dim): centr_accs[dim]})
+            accs_dict[loocv_type]["single"].update({str(dim): single_accs[loocv_type][dim]})
+            accs_dict[loocv_type]["federated"].update({str(dim): federated_accs[loocv_type][dim]})
+            accs_dict[loocv_type]["centralized"].update({str(dim): centr_accs[loocv_type][dim]})
 
 
     with open("./" + accs_path + "/" + "accs.txt", "w") as fp:

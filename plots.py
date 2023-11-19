@@ -590,5 +590,6 @@ def plot_boxplot(dimensions, accs_path):
         ax.set_xticklabels( labels_lst, rotation=0 )
         define_box_properties(data_groups, colors, ["10", "15", "20", "30"])
 
-        plt.savefig("./" + accs_path + "/boxplot.png")
+        plt.savefig("./" + accs_path + "/boxplot_" + loocv_type +".png")
+        plt.close()
 
