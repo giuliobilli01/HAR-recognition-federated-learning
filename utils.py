@@ -148,15 +148,15 @@ def create_subjects_datasets(anova_selection, max_n):
         save_dataset(s_trainX, s_trainy, "./UCI HAR Dataset split/" + "train/" + "subject-" + str(subject) + "/", subject, "train")
         save_dataset(s_testX, s_testy, "./UCI HAR Dataset split/" + "test/" + "subject-" + str(subject) + "/", subject, "test")
 
-def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix=""):
+def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix="", file_ext=".csv"):
     
 
     X_lst = list()
     y_lst = list()
 
     for sub in subjects_to_ld:
-        pathX = pathPrefix + group + "/" + "subject-" + str(sub) + "/" + "X" + group + ".csv"
-        pathy = pathPrefix + group + "/" + "subject-" + str(sub) + "/" + "y" + group + ".csv"
+        pathX = pathPrefix + group + "/" + "subject-" + str(sub) + "/" + "X" + group + file_ext
+        pathy = pathPrefix + group + "/" + "subject-" + str(sub) + "/" + "y" + group + file_ext
 
         s_X = load_file(pathX)
         s_y = load_file(pathy)
@@ -180,8 +180,8 @@ def load_subjects_group(group, subjects_to_ld, output_mode, pathPrefix=""):
     
         
 
-def load_subjects_dataset(subjects_to_ld, output_mode, dataset_feature):
-    pathPrefix = f"./UCI HAR Dataset split {dataset_feature}/"
+def load_subjects_dataset(subjects_to_ld, output_mode, dataset_feature, dataset):
+    pathPrefix = f"./{dataset} split {dataset_feature}/"
 
     trainX, trainy = load_subjects_group("train", subjects_to_ld, output_mode, pathPrefix)
     testX, testy = load_subjects_group("test", subjects_to_ld, output_mode, pathPrefix)
@@ -206,6 +206,38 @@ def load_subjects_dataset(subjects_to_ld, output_mode, dataset_feature):
     
     return  trainX, trainy, testX, testy
 
+def create_newdataset_anova(num_feat):
+    # devo caricare il dataset e unire i soggetti 
+    # poi una volta uniti calcolo l'anova per il numero di feature in input
+    # dopo aver calcolato le feature le prendo dal dataset di ogni soggetto
+    # e salvo il nuovo dataset
+    pathPrefix = "./NEW_DATASET split original/"
+    subjects_to_ld = [1, 2, 3, 4, 5, 6, 7, 8]
+    trainX, trainy = load_subjects_group("train", subjects_to_ld, "concat", pathPrefix, ".txt")
+    testX, testy = load_subjects_group("test", subjects_to_ld, "concat", pathPrefix, ".txt")
+
+    trainX_lst, trainy_lst = load_subjects_group("train", subjects_to_ld, "separated", pathPrefix, ".txt")
+    testX_lst, testy_lst = load_subjects_group("test", subjects_to_ld, "separated", pathPrefix, ".txt")
+
+    a_y_train = trainy - 1
+    a_y_test = testy - 1
+    # calcolo i valori anova sul dataset concatenato
+    var_avg_c, var_min_c  = get_anovaf(trainX, tf.keras.utils.to_categorical(a_y_train), testX, tf.keras.utils.to_categorical(a_y_test))
+    # seleziono le feature dai dataset dei singoli soggetti
+    for subj_idx, subject in enumerate(subjects_to_ld):
+        a_trainX, a_testX = feature_selection_with_max(trainX_lst[subj_idx], testX_lst[subj_idx], var_avg_c, num_feat)
+        print("a trainX", a_trainX.shape)
+        print("a testX", a_testX.shape)
+        print("trainy new", trainy_lst[subj_idx].shape)
+
+        groups = ["train", "test"]
+        # salvo il dataset in file csv
+        for group in groups:
+            if not os.path.exists("./NEW_DATASET split/"+ group +"/subject-" + str(subject)):
+                os.mkdir("./NEW_DATASET split/"+ group +"/subject-" + str(subject))
+
+        save_dataset(a_trainX, trainy_lst[subj_idx], "./NEW_DATASET split/" + "train/" + "subject-" + str(subject) + "/", subject, "train")
+        save_dataset(a_testX, testy_lst[subj_idx], "./NEW_DATASET split/" + "test/" + "subject-" + str(subject) + "/", subject, "test")
 
 
 def load_uci_dataset(pathPrefix, numFeat):

@@ -15,7 +15,7 @@ from typing import Dict, Tuple, List
 from sklearn.metrics import classification_report
 from minisom import MiniSom
 from flwr.common import NDArrays, Scalar, Metrics
-from utils import init_directories, load_subjects_dataset, create_subjects_datasets, calculate_class_distribution, onehot_decoding, filter_list_by_index
+from utils import init_directories, load_subjects_dataset, create_subjects_datasets, calculate_class_distribution, onehot_decoding, filter_list_by_index, create_newdataset_anova
 from plots import plot_fed_nofed_centr_comp, plot_som_comp_dim, plot_boxplot, plot_som, plot_cluster_comparison
 from ML_utils import calculate_subjects_accs_mean, save_accuracies, save_federated_combination, filter_combinations, find_missing_element, get_saved_combinations_accs
 
@@ -37,7 +37,7 @@ centr_accs_combinations = {}
 
 
 # default setup delle variabili di path e parametri
-save_data = "y"
+save_data = "n"
 w_path = "weights UCI"
 plots_path = "plots UCI"
 mod_path = "som_models UCI"
@@ -45,6 +45,7 @@ np_arr_path = "np_arr UCI"
 mean_path = "subjects_accs mean"
 accs_path = "subjects_accs"
 dataset_type = "split"
+dataset = "UCI HAR Dataset"
 min_som_dim = 20
 max_som_dim = 20
 current_som_dim = min_som_dim
@@ -73,9 +74,10 @@ if sys.argv[4] == "sing":
 
 if sys.argv[5] == "fed":
     federated = True
-    
-if sys.argv[6] == 'n':
-    save_data = "n"
+
+if sys.argv[6] == "new":
+    dataset = "NEW_DATASET"
+
 
 
 if len(sys.argv) >= 8:
@@ -256,7 +258,9 @@ def train_federated(num_rounds, num_clients, loocv_type):
            evaluate_metrics_aggregation_fn=simple_average,
         )
     
-    client_resources = {"num_cpus": 1, "num_gpus":1}
+    client_resources = None
+    #client_resources = {"num_cpus": 1, "num_gpus":1}
+
     hist = fl.simulation.start_simulation(
        client_fn = client_fn,
        num_clients = int(num_clients),
@@ -330,29 +334,27 @@ def train_combinations_federated(trainX_lst, trainy_lst, testX_lst, testy_lst, s
     global fed_Xtest
     global fed_ytest
 
+    print("trainXlst", len(trainX_lst))
+
     print("dim", dimension)
-    filtered_combinations = filter_combinations(combinations, dimension)
     federated_accs_combinations[loocv_type].setdefault(dimension, [])
     print("subjects", subjects_to_ld)
-    print("combinations", len(filtered_combinations))
-    
-    saved_accs = get_saved_combinations_accs(dimension)
-    for accuracy in saved_accs:
-        federated_accs_combinations[loocv_type][dimension].append(accuracy)
 
-    for combination in filtered_combinations:
-    
-        test_subject = find_missing_element(combination, 1, 31)
+    for combination in combinations:
+        print("combination", combination)
+        test_subject = find_missing_element(combination, 1, len(subjects_to_ld)+1)
         fed_Xtrain = filter_list_by_index(trainX_lst, combination)
         fed_ytrain = filter_list_by_index(trainy_lst, combination)
         fed_Xtest = filter_list_by_index(testX_lst, combination)
         fed_ytest = filter_list_by_index(testy_lst, combination)
+
+        print("fedXtrain", len(fed_Xtrain))
     
         loocv_Xtrain = trainX_lst[test_subject[0] - 1]
         loocv_ytrain = trainy_lst[test_subject[0] - 1]
         loocv_Xtest = testX_lst[test_subject[0] - 1]
         loocv_ytest = testy_lst[test_subject[0] - 1]
-        _, weights = train_federated(5, len(fed_Xtrain))
+        _, weights = train_federated(5, len(fed_Xtrain), loocv_type)
         accuracy = test_combination_federated(loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest, dimension, weights)
         save_federated_combination(test_subject, accuracy, dimension)
         federated_accs_combinations[loocv_type][dimension].append(accuracy)
@@ -386,14 +388,14 @@ def test_combination_federated(loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_yt
 
     return class_report["accuracy"]    
 
-def train_combinations_centralized(dimension, combinations, loocv_type, num_feat):
+def train_combinations_centralized(dimension, combinations, loocv_type, num_feat, subjects_to_ld):
 
     centr_accs_combinations[loocv_type].setdefault(dimension, [])
     for combination in combinations:
-        trainX, trainy, testX, testy = load_subjects_dataset(combination, "concat", num_feat)
+        trainX, trainy, testX, testy = load_subjects_dataset(combination, "concat", num_feat, dataset)
         print("trainx", trainX.shape)
-        test_subject = find_missing_element(combination, 1, 31)
-        loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest = load_subjects_dataset(test_subject, "concat", num_feat)
+        test_subject = find_missing_element(combination, 1, len(subjects_to_ld)+1)
+        loocv_Xtrain, loocv_ytrain, loocv_Xtest, loocv_ytest = load_subjects_dataset(test_subject, "concat", num_feat, dataset)
 
         # eseguire il train sul dataset concatenato
         accuracy = run_training_centr(trainX, trainy, loocv_Xtest, loocv_ytest, dimension)
@@ -513,23 +515,24 @@ def train_loocv_combinations(subjects_to_ld, dim, combinations, loocv_type):
     single_accs_combinations.setdefault(loocv_type, {})
     centr_accs_combinations.setdefault(loocv_type, {})
     federated_accs_combinations.setdefault(loocv_type, {})
+    print("dataset", dataset)
     
     if loocv_type == "std-loocv":
-        trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full")
+        trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full", dataset)
         num_feat = "full"
     elif loocv_type == "feat-loocv":
         
         if dim == 10:
-            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full")
+            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full", dataset)
             num_feat = "full"
         elif dim == 15:
-            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "158")
+            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "158", dataset)
             num_feat = "158"
         elif dim == 20:
-            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "89")
+            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "89", dataset)
             num_feat = "89"
         elif dim == 30:
-            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "39")
+            trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "39", dataset)
             num_feat = "39"
 
 
@@ -540,7 +543,7 @@ def train_loocv_combinations(subjects_to_ld, dim, combinations, loocv_type):
     if single:
         train_combinations_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dim, "no-centr", loocv_type)
     if centralized:
-        train_combinations_centralized(dim, combinations, loocv_type, num_feat)
+        train_combinations_centralized(dim, combinations, loocv_type, num_feat, subjects_to_ld)
 
 
 def train_single(trainX_lst, trainy_lst, testX_lst, testy_lst, subjects_to_ld, dimension):
@@ -585,8 +588,8 @@ def train_noloocv(subjects_to_ld, dim):
     centr_accs_combinations.setdefault("noloocv", {})
     federated_accs_combinations.setdefault("noloocv", {})
 
-    trainX, trainy, testX, testy = load_subjects_dataset(subjects_to_ld, "concat", "full")
-    trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full")
+    trainX, trainy, testX, testy = load_subjects_dataset(subjects_to_ld, "concat", "full", dataset)
+    trainX_lst, trainy_lst, testX_lst, testy_lst = load_subjects_dataset(subjects_to_ld, "separated", "full", dataset)
 
     # deve fare il train e test per ogni soggetto
     if single:
@@ -629,10 +632,17 @@ def run():
     
     if sys.argv[1] == "gen":
         create_subjects_datasets(False, 265)
+        create_newdataset_anova(265)
+
     elif sys.argv[1] == "a-gen":
         create_subjects_datasets(True, 39)
+        create_newdataset_anova(265)
 
-    subjects_to_ld=random.sample(range(1, 31), int(subjects_number))
+    subjects_to_ld = []
+    if dataset == "UCI HAR Dataset":
+        subjects_to_ld=random.sample(range(1, 31), int(subjects_number))
+    else:
+        subjects_to_ld=random.sample(range(1, 9), 8)
     subjects_to_ld.sort()
     print("subjects", subjects_to_ld)
     #calculate_class_distribution()
@@ -641,17 +651,16 @@ def run():
     # calcolo tutte le combinazioni possibili in cui ci sono 29 elementi
     # e uno rimane fuori
     combinations = list(itertools.combinations(subjects_to_ld, len(subjects_to_ld) - 1))
+    print("combinations", len(combinations))
+    for dim in dimensions:
+        current_som_dim = dim
+        #train_noloocv(subjects_to_ld, dim)
+        train_loocv_combinations(subjects_to_ld, dim, combinations, "std-loocv")
+        train_loocv_combinations(subjects_to_ld, dim, combinations, "feat-loocv")
 
 
-    #for dim in dimensions:
-    #    current_som_dim = dim
-    #    train_noloocv(subjects_to_ld, dim)
-    #    train_loocv_combinations(subjects_to_ld, dim, combinations, "std-loocv")
-    #    train_loocv_combinations(subjects_to_ld, dim, combinations, "feat-loocv")
-#
-#
-    #save_accuracies(single_accs_combinations, federated_accs_combinations, centr_accs_combinations, accs_path, dimensions)
-    plot_boxplot(dimensions, accs_path)
+    save_accuracies(single_accs_combinations, federated_accs_combinations, centr_accs_combinations, accs_path, dimensions, dataset)
+    plot_boxplot(dimensions, accs_path, dataset)
     
 
 

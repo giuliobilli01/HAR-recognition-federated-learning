@@ -52,8 +52,7 @@ def feature_selection_with_max(X_train, X_test, varianza_media_classi, max_n):
 
     # creo una versione ordinata dei valori anova
     sorted_anova = sorted(varianza_media_classi)[:max_n]
-    print("sorted", sorted_anova)
-    print("sorted len", len(sorted_anova))
+   
     
     for idx, val in enumerate(varianza_media_classi):
         if val in sorted_anova:
@@ -110,10 +109,10 @@ def calculate_subjects_accs_mean(nofed_accs, fed_accs, centr_accs, min_som_dim, 
         json.dump(mean_dict, fp, indent=4)
 
 
-def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensions):
+def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensions, dataset):
     accs_dict = {}
-    if os.path.exists("./" + accs_path + "/" + "accs.txt"): 
-        with open ("./" + accs_path + "/"  + "accs.txt") as js:
+    if os.path.exists("./" + accs_path + "/" + "accs-" + dataset + ".txt"): 
+        with open ("./" + accs_path + "/"  + "accs " + dataset + ".txt") as js:
             data = json.load(js)
             accs_dict = data
 
@@ -135,7 +134,7 @@ def save_accuracies(single_accs, federated_accs, centr_accs, accs_path, dimensio
             accs_dict[loocv_type]["centralized"].update({str(dim): centr_accs[loocv_type][dim]})
 
 
-    with open("./" + accs_path + "/" + "accs.txt", "w") as fp:
+    with open("./" + accs_path + "/" + "accs" + dataset + ".txt", "w") as fp:
         json.dump(accs_dict, fp, indent=4)
 
 
@@ -154,7 +153,7 @@ def save_federated_combination(test_sub, accuracy, dimension):
         json.dump(combination_dict, fp, indent=4)
 
 
-def filter_combinations(combinations, dimension):
+def filter_combinations(combinations, dimension, subjects_to_ld):
     combination_dict = {}
     if os.path.exists(f"./combinations/accs{dimension}.txt"): 
         with open (f"./combinations/accs{dimension}.txt") as js:
@@ -169,7 +168,7 @@ def filter_combinations(combinations, dimension):
 
     filtered_comb = []
     for index, combination in enumerate(combinations):
-        test_subject = find_missing_element(combination, 1, 31)
+        test_subject = find_missing_element(combination, 1, len(subjects_to_ld)+1)
         if not test_subject[0] in tested_subjects:
             filtered_comb.append(combination)    
 

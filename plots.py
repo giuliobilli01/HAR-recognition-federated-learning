@@ -516,12 +516,14 @@ def define_box_properties(plot_groups, color_codes, labels):
         
 
 
-def plot_boxplot(dimensions, accs_path):
+def plot_boxplot(dimensions, accs_path, dataset):
     accuracies_dict = {}
-    if os.path.exists("./" + accs_path + "/" + "accs.txt"): 
-        with open ("./" + accs_path + "/" + "accs.txt") as js:
+    print("dataset", dataset)
+    if os.path.exists("./" + accs_path + "/" + "accs" + dataset + ".txt"): 
+        with open ("./" + accs_path + "/" + "accs" + dataset + ".txt") as js:
             data = json.load(js)
             accuracies_dict = data
+    print("accs", accuracies_dict)
     # raggruppo i vari dati per le diverse dimensioni
     for loocv_type in ["noloocv", "std-loocv","feat-loocv"]:
         ten_lst = []
@@ -590,6 +592,6 @@ def plot_boxplot(dimensions, accs_path):
         ax.set_xticklabels( labels_lst, rotation=0 )
         define_box_properties(data_groups, colors, ["10", "15", "20", "30"])
 
-        plt.savefig("./" + accs_path + "/boxplot_" + loocv_type +".png")
+        plt.savefig("./" + accs_path + "/boxplot_" + loocv_type + "_" + dataset + ".png")
         plt.close()
 
